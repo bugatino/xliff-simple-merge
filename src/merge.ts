@@ -2,6 +2,7 @@ import {XmlDocument, XmlElement, XmlNode} from 'xmldoc';
 import levenshtein from 'js-levenshtein';
 
 type MergeOptions = {
+    removeUnused?: boolean,
     fuzzyMatch?: boolean,
     collapseWhitespace?: boolean,
     resetTranslationState?: boolean,
@@ -85,13 +86,15 @@ export function merge(inFileContent: string, destFileContent: string, options?: 
 
     // collect (potentially) obsolete units (defer actual removal to allow for fuzzy matching..):
     const originIds = new Set(inUnits.map(u => u.attr.id));
-    let removeNodes = getUnits(destDoc, xliffVersion)!.filter(destUnit => !originIds.has(destUnit.attr.id));
+    let removeNodes = options?.removeUnused ?? true ? getUnits(destDoc, xliffVersion)!.filter(destUnit => !originIds.has(destUnit.attr.id)) : [];
 
     // add missing units and update existing ones:
     for (const unit of inUnits) {
         const destUnit = getDestUnit(unit, destUnitsParent, options?.fuzzyMatch ?? true ? removeNodes : []);
         const unitSource = getSourceElement(unit)!;
         const unitSourceText = toString(...unitSource.children);
+        const unitTarget = getTargetElement(unit);
+        const unitTargetText = unitTarget?.children ? toString(...unitTarget.children) : undefined;
         if (destUnit) {
             const destSource = getSourceElement(destUnit)!;
             const destSourceText = toString(...destSource.children);
@@ -119,13 +122,15 @@ export function merge(inFileContent: string, destFileContent: string, options?: 
             updateFirstAndLastChild(destUnit);
         } else {
             console.debug(`adding element with id "${unit.attr.id}"`);
-            const targetNode = new XmlDocument(`<target>${options?.newTranslationTargetsBlank ?? false ? '' : unitSourceText}</target>`);
-            if (xliffVersion === '2.0') {
-                const segmentSource = unit.childNamed('segment')!;
-                segmentSource.children.push(targetNode);
-            } else {
-                const sourceIndex = unit.children.indexOf(unitSource);
-                unit.children.splice(sourceIndex + 1, 0, targetNode);
+            if (!unitTargetText) {
+                const targetNode = new XmlDocument(`<target>${options?.newTranslationTargetsBlank ?? false ? '' : unitSourceText}</target>`);
+                if (xliffVersion === '2.0') {
+                    const segmentSource = unit.childNamed('segment')!;
+                    segmentSource.children.push(targetNode);
+                } else {
+                    const sourceIndex = unit.children.indexOf(unitSource);
+                    unit.children.splice(sourceIndex + 1, 0, targetNode);
+                }
             }
             resetTranslationState(unit, xliffVersion, options);
             destUnitsParent.children.push(unit);
@@ -133,8 +138,10 @@ export function merge(inFileContent: string, destFileContent: string, options?: 
         }
     }
 
-    console.debug(`removing ${removeNodes.length} ids: ${removeNodes.map(n => n.attr.id).join(', ')}`);
-    removeChildren(destUnitsParent, ...removeNodes);
+    if (options?.removeUnused ?? true) {
+        console.debug(`removing ${removeNodes.length} ids: ${removeNodes.map(n => n.attr.id).join(', ')}`);
+        removeChildren(destUnitsParent, ...removeNodes);
+    }
 
     // retain xml declaration:
     const xmlDecMatch = destFileContent.match(/^<\?xml [^>]*>\s*/i);
