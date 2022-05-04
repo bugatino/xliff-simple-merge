@@ -98,21 +98,47 @@ export function merge(inFileContent: string, destFileContent: string, options?: 
         if (destUnit) {
             const destSource = getSourceElement(destUnit)!;
             const destSourceText = toString(...destSource.children);
-            if (options?.collapseWhitespace ?? true ? collapseWhitespace(destSourceText) !== collapseWhitespace(unitSourceText) : destSourceText !== unitSourceText) {
+            const destTarget = getTargetElement(destUnit)!;
+            const destTargetText = destTarget?.children ? toString(...destTarget.children) : undefined;
+            const sourceLanguage = options?.sourceLanguage;
+
+            if (options?.collapseWhitespace ?? true 
+                ? collapseWhitespace(destSourceText) !== collapseWhitespace(unitSourceText) 
+                : destSourceText !== unitSourceText
+            ) {
                 destSource.children = unitSource.children;
-                if (options?.sourceLanguage) {
+                if (sourceLanguage) {
                     getTargetElement(destUnit)!.children = unitSource.children;
                 }
                 updateFirstAndLastChild(destSource);
                 resetTranslationState(destUnit, xliffVersion, options);
-                console.debug(`update element with id "${unit.attr.id}" with new source: ${toString(...destSource.children)} (was: ${destSourceText})`);
+                console.debug(`update element with id "${unit.attr.id}" with new source: ${unitSourceText} (was: ${destSourceText})`);
             }
+
+            if (!sourceLanguage 
+                && unitTarget?.children
+                && destTarget?.children
+                && unitTargetText 
+                && destTargetText 
+                && (
+                    options?.collapseWhitespace ?? true 
+                    ? collapseWhitespace(destTargetText) !== collapseWhitespace(unitTargetText) 
+                    : destTargetText !== unitTargetText
+                )
+            ) {
+                destTarget.children = unitTarget.children;
+                updateFirstAndLastChild(destTarget);
+                resetTranslationState(destUnit, xliffVersion, options);
+                console.debug(`update element with id "${unit.attr.id}" with new target: ${unitTargetText} (was: ${destTargetText})`);
+            }
+
             if (destUnit.attr.id !== unit.attr.id) {
                 console.debug(`matched unit with previous id "${destUnit.attr.id}" to new id: "${unit.attr.id}"`);
                 removeNodes = removeNodes.filter(n => n !== destUnit);
                 destUnit.attr.id = unit.attr.id;
                 resetTranslationState(destUnit, xliffVersion, options);
             }
+            
             // update notes (remark: there can be multiple context-groups!):
             const nodeName = xliffVersion === '2.0' ? 'notes' : 'context-group';
             const noteIndex = destUnit.children.findIndex(n => n.type === 'element' && n.name === nodeName);

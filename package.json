@@ -1,7 +1,7 @@
 {
   "name": "@bugatino/xliff-simple-merge",
-  "version": "0.10.2",
-  "description": "Merges XLIFF files",
+  "version": "0.10.3",
+  "description": "Merges XLIFF files (with keep unused trans-unit id)",
   "main": "dist/src/index.js",
   "bin": {
     "xliff-simple-merge": "dist/src/index.js"
